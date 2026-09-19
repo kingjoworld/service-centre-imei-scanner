@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
 
@@ -10,7 +10,11 @@
 
   <title>Service Centre IMEI Scanner</title>
 
+  <!-- ZXing Browser barcode scanner -->
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+
   <style>
+
     * {
       box-sizing: border-box;
     }
@@ -18,107 +22,180 @@
     body {
       margin: 0;
       padding: 20px;
+      font-family: Arial, Helvetica, sans-serif;
       background: #f4f6f8;
-      font-family: Arial, sans-serif;
       color: #222;
-    }
-
-    .container {
-      max-width: 500px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 14px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    }
-
-    h2 {
-      margin-top: 0;
       text-align: center;
     }
 
-    .camera-box {
+    .container {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 18px;
+    }
+
+    .scanner-box {
       position: relative;
       width: 100%;
       background: #000;
       border-radius: 12px;
       overflow: hidden;
-      margin-top: 15px;
     }
 
     video {
       width: 100%;
-      display: block;
+      height: auto;
       min-height: 280px;
+      display: block;
       object-fit: cover;
+      background: #000;
+    }
+
+    .scan-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 75%;
+      height: 90px;
+      transform: translate(-50%, -50%);
+      border: 3px solid #00ff66;
+      border-radius: 10px;
+      pointer-events: none;
+      box-shadow:
+        0 0 0 9999px rgba(0,0,0,0.25);
     }
 
     .scan-line {
       position: absolute;
-      left: 10%;
-      right: 10%;
+      left: 5%;
+      right: 5%;
       top: 50%;
       height: 2px;
-      background: red;
-      box-shadow: 0 0 8px red;
+      background: #00ff66;
+      animation: scanLine 2s linear infinite;
+    }
+
+    @keyframes scanLine {
+      0% {
+        top: 10%;
+      }
+
+      50% {
+        top: 90%;
+      }
+
+      100% {
+        top: 10%;
+      }
     }
 
     .status {
-      margin-top: 15px;
+      margin: 15px 0;
       padding: 12px;
       border-radius: 8px;
-      background: #f0f0f0;
-      text-align: center;
+      background: #eef3f7;
       font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .status.success {
+      background: #e8f8ee;
+      color: #126b35;
+    }
+
+    .status.error {
+      background: #fdeaea;
+      color: #9b1c1c;
+    }
+
+    .status.warning {
+      background: #fff5dc;
+      color: #7a5600;
     }
 
     button {
       width: 100%;
-      padding: 13px;
       border: none;
       border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
+      padding: 14px;
       margin-top: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
     }
 
-    #startButton {
-      background: #1565c0;
+    .start-btn {
+      background: #0b57d0;
       color: white;
     }
 
-    #stopButton {
-      background: #d32f2f;
+    .stop-btn {
+      background: #555;
       color: white;
-      display: none;
     }
 
-    .manual {
-      margin-top: 20px;
+    .manual-btn {
+      background: #198754;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .manual-section {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
     }
 
     input {
       width: 100%;
-      padding: 13px;
-      border: 1px solid #ccc;
+      padding: 14px;
+      font-size: 17px;
+      border: 1px solid #bbb;
       border-radius: 8px;
-      font-size: 16px;
+      margin-top: 8px;
+      text-align: center;
+      letter-spacing: 1px;
     }
 
-    #sendButton {
-      background: #2e7d32;
-      color: white;
+    .result {
+      margin-top: 15px;
+      padding: 14px;
+      border-radius: 8px;
+      background: #f1f1f1;
+      font-weight: bold;
+      word-break: break-all;
     }
 
-    .success {
-      background: #e8f5e9;
-      color: #1b5e20;
+    .hidden {
+      display: none;
     }
 
-    .error {
-      background: #ffebee;
-      color: #b71c1c;
+    .small {
+      font-size: 12px;
+      color: #777;
+      margin-top: 10px;
+      line-height: 1.5;
     }
+
   </style>
 </head>
 
@@ -126,64 +203,90 @@
 
 <div class="container">
 
-  <h2>📷 IMEI Scanner</h2>
+  <h1>📷 IMEI Scanner</h1>
 
-  <p style="text-align:center;font-size:14px;">
+  <div class="subtitle">
     Point your phone camera at the IMEI barcode.
-  </p>
+  </div>
 
-  <div class="camera-box">
+  <div class="scanner-box">
+
     <video
       id="video"
       autoplay
-      playsinline
       muted
-    ></video>
+      playsinline>
+    </video>
 
-    <div class="scan-line"></div>
+    <div
+      id="scanFrame"
+      class="scan-frame hidden">
+
+      <div class="scan-line"></div>
+
+    </div>
+
   </div>
 
   <div
     id="status"
-    class="status"
-  >
-    Camera not started.
+    class="status">
+
+    Scanner is ready.
+
   </div>
 
   <button
     id="startButton"
-    onclick="startCamera()"
-  >
+    class="start-btn"
+    onclick="startScanner()">
+
     📷 Start Camera
+
   </button>
 
   <button
     id="stopButton"
-    onclick="stopCamera()"
-  >
-    Stop Camera
+    class="stop-btn"
+    onclick="stopScanner()"
+    disabled>
+
+    🛑 Stop Camera
+
   </button>
 
-  <div class="manual">
+  <div
+    id="result"
+    class="result hidden">
+  </div>
 
-    <label>
-      <strong>Manual IMEI</strong>
-    </label>
+  <div class="manual-section">
+
+    <strong>Manual IMEI Entry</strong>
 
     <input
-      id="imeiInput"
-      type="text"
+      id="manualIMEI"
+      type="tel"
       inputmode="numeric"
+      autocomplete="off"
+      placeholder="Enter 15-digit IMEI"
       maxlength="16"
-      placeholder="Enter IMEI manually"
     >
 
     <button
-      id="sendButton"
-      onclick="sendIMEI()"
-    >
-      Send IMEI to Stock System
+      class="manual-btn"
+      onclick="sendManualIMEI()">
+
+      📤 Send IMEI to Stock System
+
     </button>
+
+  </div>
+
+  <div class="small">
+
+    If automatic scanning does not detect the barcode,
+    you can enter the IMEI manually above.
 
   </div>
 
@@ -192,368 +295,565 @@
 
 <script>
 
-let stream = null;
-let scanning = false;
-let detector = null;
+  let codeReader = null;
+
+  let scannerControls = null;
+
+  let scanning = false;
+
+  let scanAlreadySent = false;
 
 
-/* -----------------------------------------
-   STATUS
------------------------------------------ */
+  /*
+   * ----------------------------------------------------
+   * STATUS DISPLAY
+   * ----------------------------------------------------
+   */
 
-function setStatus(message, type) {
+  function setStatus(message, type = '') {
 
-  const status =
-    document.getElementById('status');
+    const status =
+      document.getElementById('status');
 
-  status.textContent = message;
+    status.textContent = message;
 
-  status.className = 'status';
+    status.className = 'status';
 
-  if (type === 'success') {
-    status.classList.add('success');
+    if (type) {
+      status.classList.add(type);
+    }
+
   }
 
-  if (type === 'error') {
-    status.classList.add('error');
+
+  /*
+   * ----------------------------------------------------
+   * CLEAN IMEI
+   * ----------------------------------------------------
+   */
+
+  function cleanIMEI(value) {
+
+    return String(value || '')
+      .replace(/\D/g, '')
+      .trim();
+
   }
-}
 
 
-/* -----------------------------------------
-   START CAMERA
------------------------------------------ */
+  /*
+   * ----------------------------------------------------
+   * VALIDATE IMEI
+   * ----------------------------------------------------
+   */
 
-async function startCamera() {
+  function isValidIMEI(value) {
 
-  if (!navigator.mediaDevices ||
-      !navigator.mediaDevices.getUserMedia) {
+    const imei = cleanIMEI(value);
+
+    /*
+     * Most IMEIs are 15 digits.
+     * We allow 14-16 because your Apps Script
+     * registration function already allows 14-16.
+     */
+
+    if (!/^\d{14,16}$/.test(imei)) {
+      return false;
+    }
+
+    return true;
+
+  }
+
+
+  /*
+   * ----------------------------------------------------
+   * SEND IMEI TO PARENT SERVICE CENTRE WINDOW
+   * ----------------------------------------------------
+   */
+
+  function sendIMEI(imei) {
+
+    imei = cleanIMEI(imei);
+
+    if (!isValidIMEI(imei)) {
+
+      setStatus(
+        'The scanned value does not look like a valid IMEI. Please try again.',
+        'warning'
+      );
+
+      return false;
+    }
+
+
+    /*
+     * Prevent the scanner from sending
+     * the same barcode repeatedly.
+     */
+
+    if (scanAlreadySent) {
+      return false;
+    }
+
+    scanAlreadySent = true;
+
+
+    /*
+     * Show result.
+     */
+
+    const result =
+      document.getElementById('result');
+
+    result.textContent =
+      'IMEI detected: ' + imei;
+
+    result.classList.remove('hidden');
+
 
     setStatus(
-      'Camera access is not supported by this browser.',
-      'error'
+      'IMEI detected. Sending to the Service Centre system...',
+      'success'
     );
 
-    return;
-  }
 
-  try {
+    /*
+     * Send IMEI back to the Apps Script window.
+     */
 
-    setStatus(
-      'Requesting camera permission...',
-      ''
-    );
+    if (
+      window.opener &&
+      !window.opener.closed
+    ) {
 
-    stream =
-      await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: {
-            ideal: 'environment'
-          }
+      window.opener.postMessage(
+        {
+          type: 'IMEI_SCANNED',
+          imei: imei
         },
-        audio: false
-      });
+        'https://script.google.com'
+      );
+
+      /*
+       * Also send with wildcard as a fallback.
+       * This helps when the Apps Script deployment
+       * redirects through another Google domain.
+       */
+
+      window.opener.postMessage(
+        {
+          type: 'IMEI_SCANNED',
+          imei: imei
+        },
+        '*'
+      );
+
+
+      setStatus(
+        '✅ IMEI sent successfully to the Service Centre system.',
+        'success'
+      );
+
+    } else {
+
+      setStatus(
+        'The Service Centre window is not available. Please enter the IMEI manually in the main system.',
+        'error'
+      );
+
+    }
+
+
+    stopScanner();
+
+    return true;
+
+  }
+
+
+  /*
+   * ----------------------------------------------------
+   * START SCANNER
+   * ----------------------------------------------------
+   */
+
+  async function startScanner() {
+
+    if (scanning) {
+      return;
+    }
+
+
+    scanAlreadySent = false;
+
 
     const video =
       document.getElementById('video');
 
-    video.srcObject = stream;
+    const scanFrame =
+      document.getElementById('scanFrame');
 
-    await video.play();
+    const startButton =
+      document.getElementById('startButton');
 
-    document.getElementById(
-      'startButton'
-    ).style.display = 'none';
+    const stopButton =
+      document.getElementById('stopButton');
 
-    document.getElementById(
-      'stopButton'
-    ).style.display = 'block';
 
     setStatus(
-      'Camera started. Point it at the IMEI barcode.',
-      'success'
+      'Starting camera... Please allow camera permission if requested.'
     );
 
-    startBarcodeScanner();
-
-  } catch (error) {
-
-    console.error(error);
-
-    let message =
-      'Camera could not be started.';
-
-    if (error.name === 'NotAllowedError') {
-
-      message =
-        'Camera permission was denied. Please allow camera access and try again.';
-
-    } else if (error.name === 'NotFoundError') {
-
-      message =
-        'No camera was found on this device.';
-
-    } else if (error.name === 'NotReadableError') {
-
-      message =
-        'The camera is already being used by another application.';
-
-    } else if (error.name === 'SecurityError') {
-
-      message =
-        'Camera access was blocked by the browser security settings.';
-
-    }
-
-    setStatus(message, 'error');
-  }
-}
-
-
-/* -----------------------------------------
-   BARCODE SCANNER
------------------------------------------ */
-
-async function startBarcodeScanner() {
-
-  if (!('BarcodeDetector' in window)) {
-
-    setStatus(
-      'Camera is working, but automatic barcode scanning is not supported by this browser. Enter the IMEI manually below.',
-      ''
-    );
-
-    return;
-  }
-
-  try {
-
-    const supported =
-      await BarcodeDetector.getSupportedFormats();
-
-    const preferredFormats = [
-      'code_128',
-      'code_39',
-      'ean_13',
-      'ean_8',
-      'upc_a',
-      'upc_e',
-      'qr_code'
-    ];
-
-    const formats =
-      preferredFormats.filter(
-        format => supported.includes(format)
-      );
-
-    if (formats.length === 0) {
-
-      setStatus(
-        'Barcode scanning is not supported. Enter the IMEI manually.',
-        ''
-      );
-
-      return;
-    }
-
-    detector =
-      new BarcodeDetector({
-        formats: formats
-      });
-
-    scanning = true;
-
-    scanFrame();
-
-  } catch (error) {
-
-    console.error(error);
-
-    setStatus(
-      'Barcode scanner could not be started. You can enter the IMEI manually.',
-      ''
-    );
-  }
-}
-
-
-/* -----------------------------------------
-   SCAN FRAME
------------------------------------------ */
-
-async function scanFrame() {
-
-  if (!scanning) return;
-
-  const video =
-    document.getElementById('video');
-
-  if (
-    video.readyState >= 2 &&
-    detector
-  ) {
 
     try {
 
-      const barcodes =
-        await detector.detect(video);
+      /*
+       * Make sure the browser supports camera access.
+       */
 
-      if (barcodes.length > 0) {
+      if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+      ) {
 
-        const rawValue =
-          barcodes[0].rawValue || '';
+        throw new Error(
+          'Camera access is not supported by this browser.'
+        );
 
-        const imei =
-          rawValue.replace(/\D/g, '');
-
-        if (
-          imei.length >= 14 &&
-          imei.length <= 16
-        ) {
-
-          document.getElementById(
-            'imeiInput'
-          ).value = imei;
-
-          setStatus(
-            'IMEI scanned successfully: ' + imei,
-            'success'
-          );
-
-          stopCamera();
-
-          setTimeout(
-            sendIMEI,
-            500
-          );
-
-          return;
-        }
       }
+
+
+      /*
+       * Make sure ZXing loaded.
+       */
+
+      if (
+        typeof ZXingBrowser === 'undefined'
+      ) {
+
+        throw new Error(
+          'The barcode scanning library could not be loaded. Please check your internet connection.'
+        );
+
+      }
+
+
+      /*
+       * Create multi-format reader.
+       */
+
+      codeReader =
+        new ZXingBrowser.BrowserMultiFormatReader();
+
+
+      scanning = true;
+
+
+      startButton.disabled = true;
+
+      stopButton.disabled = false;
+
+      scanFrame.classList.remove('hidden');
+
+
+      setStatus(
+        '📷 Camera starting... Point it at the IMEI barcode.'
+      );
+
+
+      /*
+       * Ask ZXing to use the environment/rear camera.
+       *
+       * Passing null lets ZXing use its preferred
+       * camera, with environment-facing camera preferred.
+       */
+
+      scannerControls =
+        await codeReader.decodeFromVideoDevice(
+          undefined,
+          video,
+          (result, error) => {
+
+            /*
+             * A result means a barcode was successfully
+             * decoded.
+             */
+
+            if (result) {
+
+              const text =
+                result.getText();
+
+              sendIMEI(text);
+
+              return;
+            }
+
+
+            /*
+             * Normal "nothing found yet" errors are
+             * ignored because the scanner keeps looking.
+             */
+
+          }
+        );
+
+
+      setStatus(
+        '📷 Scanner active. Point the camera at the IMEI barcode.'
+      );
 
     } catch (error) {
 
       console.error(
-        'Barcode detection error:',
+        'Scanner error:',
         error
       );
+
+
+      scanning = false;
+
+      startButton.disabled = false;
+
+      stopButton.disabled = true;
+
+      scanFrame.classList.add('hidden');
+
+
+      let message =
+        'Camera could not be started.';
+
+
+      if (
+        error &&
+        error.name === 'NotAllowedError'
+      ) {
+
+        message =
+          'Camera permission was denied. Please allow Camera permission for Chrome and try again.';
+
+      } else if (
+        error &&
+        error.name === 'NotFoundError'
+      ) {
+
+        message =
+          'No camera was found on this device.';
+
+      } else if (
+        error &&
+        error.name === 'NotReadableError'
+      ) {
+
+        message =
+          'The camera is currently being used by another application. Close other camera/video apps and try again.';
+
+      } else if (
+        error &&
+        error.name === 'SecurityError'
+      ) {
+
+        message =
+          'The browser blocked camera access for security reasons. Please open the scanner using HTTPS.';
+
+      } else if (
+        error &&
+        error.message
+      ) {
+
+        message =
+          error.message;
+
+      }
+
+
+      setStatus(
+        '❌ ' + message,
+        'error'
+      );
+
     }
+
   }
 
-  if (scanning) {
 
-    requestAnimationFrame(
-      scanFrame
-    );
-  }
-}
+  /*
+   * ----------------------------------------------------
+   * STOP SCANNER
+   * ----------------------------------------------------
+   */
 
+  function stopScanner() {
 
-/* -----------------------------------------
-   STOP CAMERA
------------------------------------------ */
+    try {
 
-function stopCamera() {
+      if (scannerControls) {
 
-  scanning = false;
+        if (
+          typeof scannerControls.stop ===
+          'function'
+        ) {
 
-  if (stream) {
+          scannerControls.stop();
 
-    stream.getTracks().forEach(
-      track => track.stop()
-    );
+        }
 
-    stream = null;
-  }
+      }
 
-  const video =
-    document.getElementById('video');
+    } catch (error) {
 
-  video.srcObject = null;
+      console.log(
+        'Scanner controls stop error:',
+        error
+      );
 
-  document.getElementById(
-    'startButton'
-  ).style.display = 'block';
-
-  document.getElementById(
-    'stopButton'
-  ).style.display = 'none';
-}
+    }
 
 
-/* -----------------------------------------
-   SEND IMEI TO MAIN SYSTEM
------------------------------------------ */
+    scannerControls = null;
 
-function sendIMEI() {
 
-  const input =
+    /*
+     * Stop any active video tracks.
+     */
+
+    const video =
+      document.getElementById('video');
+
+
+    if (
+      video &&
+      video.srcObject
+    ) {
+
+      const tracks =
+        video.srcObject.getTracks();
+
+      tracks.forEach(track => {
+        track.stop();
+      });
+
+      video.srcObject = null;
+
+    }
+
+
+    scanning = false;
+
+
     document.getElementById(
-      'imeiInput'
-    );
+      'startButton'
+    ).disabled = false;
 
-  const imei =
-    String(input.value || '')
-      .replace(/\D/g, '');
 
-  if (
-    imei.length < 14 ||
-    imei.length > 16
-  ) {
+    document.getElementById(
+      'stopButton'
+    ).disabled = true;
 
-    setStatus(
-      'Please enter a valid 14–16 digit IMEI.',
-      'error'
-    );
 
-    return;
-  }
+    document.getElementById(
+      'scanFrame'
+    ).classList.add('hidden');
 
-  if (
-    !window.opener ||
-    window.opener.closed
-  ) {
 
     setStatus(
-      'The Service Centre Stock System is not open. Please open the scanner from the main system.',
-      'error'
+      'Scanner stopped. Tap "Start Camera" to scan again.'
     );
 
-    return;
   }
 
-  window.opener.postMessage(
-    {
-      type: 'IMEI_SCANNED',
-      imei: imei
-    },
-    '*'
-  );
 
-  setStatus(
-    'IMEI sent to the Service Centre Stock System.',
-    'success'
-  );
+  /*
+   * ----------------------------------------------------
+   * MANUAL IMEI
+   * ----------------------------------------------------
+   */
 
-  setTimeout(
+  function sendManualIMEI() {
+
+    const input =
+      document.getElementById(
+        'manualIMEI'
+      );
+
+
+    const imei =
+      cleanIMEI(input.value);
+
+
+    if (!isValidIMEI(imei)) {
+
+      setStatus(
+        'Please enter a valid 14-16 digit IMEI.',
+        'warning'
+      );
+
+      input.focus();
+
+      return;
+
+    }
+
+
+    scanAlreadySent = false;
+
+    sendIMEI(imei);
+
+  }
+
+
+  /*
+   * ----------------------------------------------------
+   * ENTER KEY FOR MANUAL IMEI
+   * ----------------------------------------------------
+   */
+
+  document
+    .getElementById('manualIMEI')
+    .addEventListener(
+      'keydown',
+      function(event) {
+
+        if (
+          event.key === 'Enter'
+        ) {
+
+          event.preventDefault();
+
+          sendManualIMEI();
+
+        }
+
+      }
+    );
+
+
+  /*
+   * ----------------------------------------------------
+   * CLEANUP WHEN WINDOW CLOSES
+   * ----------------------------------------------------
+   */
+
+  window.addEventListener(
+    'beforeunload',
     function() {
 
-      window.close();
+      stopScanner();
 
-    },
-    1000
+    }
   );
-}
 
 
-/* -----------------------------------------
-   CLEANUP
------------------------------------------ */
+  /*
+   * ----------------------------------------------------
+   * INITIAL MESSAGE
+   * ----------------------------------------------------
+   */
 
-window.addEventListener(
-  'beforeunload',
-  stopCamera
-);
+  setStatus(
+    'Scanner ready. Tap "Start Camera" to begin.'
+  );
 
 </script>
 
