@@ -93,11 +93,12 @@
       font-weight: bold;
     }
 
-    .info {
-      margin-top: 15px;
+    .hint {
+      margin-top: 12px;
       font-size: 13px;
       color: #666;
       text-align: center;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -109,7 +110,7 @@
   <h2>📷 IMEI Scanner</h2>
 
   <p style="text-align:center;">
-    Point the camera directly at the IMEI barcode.
+    Place the IMEI barcode clearly inside the camera view.
   </p>
 
   <video id="video" autoplay muted playsinline></video>
@@ -126,7 +127,12 @@
     Camera not started.
   </div>
 
-  <div class="manual">
+  <div class="hint">
+    For best results, hold the barcode 10–20 cm from the camera,
+    keep it horizontal and make sure the barcode is well lit.
+  </div>
+
+  <div style="margin-top:25px;padding-top:20px;border-top:1px solid #ddd;">
 
     <h3>Enter IMEI Manually</h3>
 
@@ -142,10 +148,6 @@
       Send IMEI to Stock System
     </button>
 
-  </div>
-
-  <div class="info">
-    Scanner supports common 1D and 2D barcode formats.
   </div>
 
 </div>
@@ -166,7 +168,6 @@ const imeiInput = document.getElementById('imeiInput');
 function setStatus(message, type = '') {
 
   status.textContent = message;
-
   status.className = 'status';
 
   if (type) {
@@ -176,8 +177,8 @@ function setStatus(message, type = '') {
 
 
 /*
- * Extract a 14–16 digit IMEI from whatever
- * text the barcode decoder returns.
+ * Extract a 14–16 digit IMEI from
+ * the decoded barcode text.
  */
 function extractIMEI(text) {
 
@@ -185,29 +186,26 @@ function extractIMEI(text) {
     return null;
   }
 
-  const digits = String(text).replace(/\D/g, '');
+  const cleaned = String(text).replace(/\D/g, '');
 
-  /*
-   * Look for a 14–16 digit sequence.
-   */
-  const match = digits.match(/\d{14,16}/);
+  const match = cleaned.match(/\d{14,16}/);
 
-  if (match) {
-    return match[0];
-  }
-
-  return null;
+  return match ? match[0] : null;
 }
 
 
-function sendIMEI(imei) {
+/*
+ * Send the IMEI back to the
+ * Service Centre system.
+ */
+function sendIMEI(value) {
 
-  imei = extractIMEI(imei);
+  const imei = extractIMEI(value);
 
   if (!imei) {
 
     setStatus(
-      'No valid 14–16 digit IMEI was found.',
+      'The scanned value is not a valid 14–16 digit IMEI.',
       'error'
     );
 
@@ -216,33 +214,36 @@ function sendIMEI(imei) {
 
   imeiInput.value = imei;
 
-  if (window.opener && !window.opener.closed) {
-
-    window.opener.postMessage(
-      {
-        type: 'IMEI_SCANNED',
-        imei: imei
-      },
-      '*'
-    );
+  if (!window.opener || window.opener.closed) {
 
     setStatus(
-      'IMEI ' + imei + ' sent successfully.',
-      'success'
-    );
-
-    stopScanner();
-
-  } else {
-
-    setStatus(
-      'Scanner was not opened from the Service Centre system.',
+      'Please open this scanner from the Service Centre system.',
       'error'
     );
+
+    return;
   }
+
+  window.opener.postMessage(
+    {
+      type: 'IMEI_SCANNED',
+      imei: imei
+    },
+    '*'
+  );
+
+  setStatus(
+    'IMEI ' + imei + ' detected and sent successfully.',
+    'success'
+  );
+
+  stopScanner();
 }
 
 
+/*
+ * Start the dedicated 1D scanner.
+ */
 async function startScanner() {
 
   try {
@@ -252,7 +253,7 @@ async function startScanner() {
     if (!window.ZXingBrowser) {
 
       setStatus(
-        'ZXing scanner library did not load. Check your internet connection.',
+        'The barcode scanner library could not be loaded. Check your internet connection.',
         'error'
       );
 
@@ -260,17 +261,20 @@ async function startScanner() {
     }
 
     setStatus(
-      'Preparing camera and barcode scanner...'
+      'Preparing 1D barcode scanner...'
     );
 
     /*
-     * Create ZXing reader.
+     * Dedicated 1D barcode reader.
+     *
+     * This is different from the previous
+     * general multi-format reader.
      */
     codeReader =
-      new ZXingBrowser.BrowserMultiFormatReader();
+      new ZXingBrowser.BrowserMultiFormatOneDReader();
 
     /*
-     * Get available cameras.
+     * Find available cameras.
      */
     const devices =
       await ZXingBrowser.BrowserCodeReader
@@ -279,7 +283,7 @@ async function startScanner() {
     if (!devices || devices.length === 0) {
 
       setStatus(
-        'No camera was found on this device.',
+        'No camera was found.',
         'error'
       );
 
@@ -287,8 +291,9 @@ async function startScanner() {
     }
 
     /*
-     * Prefer a back/environment camera.
-     * If unavailable, use the first camera.
+     * Prefer a rear/environment camera.
+     * On laptops this normally falls back
+     * to the available webcam.
      */
     let selectedDeviceId =
       devices[0].deviceId;
@@ -312,11 +317,11 @@ async function startScanner() {
     }
 
     setStatus(
-      'Camera found. Starting barcode detection...'
+      'Camera ready. Looking for the IMEI barcode...'
     );
 
     /*
-     * Start continuous decoding.
+     * Continuously scan the camera.
      */
     controls =
       await codeReader.decodeFromVideoDevice(
@@ -326,16 +331,16 @@ async function startScanner() {
 
           if (result) {
 
-            const rawText =
+            const rawValue =
               result.getText();
 
             console.log(
-              'Barcode detected:',
-              rawText
+              '1D barcode detected:',
+              rawValue
             );
 
             const imei =
-              extractIMEI(rawText);
+              extractIMEI(rawValue);
 
             if (imei) {
 
@@ -344,7 +349,7 @@ async function startScanner() {
             } else {
 
               setStatus(
-                'Barcode detected, but it does not contain a 14–16 digit IMEI. Keep scanning...',
+                'Barcode detected, but it does not contain a valid IMEI. Keep scanning...',
                 'error'
               );
             }
@@ -354,7 +359,7 @@ async function startScanner() {
       );
 
     setStatus(
-      'Camera is active. Hold the IMEI barcode steady inside the camera view.'
+      'Camera is active. Hold the IMEI barcode steady in the frame.'
     );
 
   } catch (error) {
@@ -365,14 +370,17 @@ async function startScanner() {
     );
 
     setStatus(
-      'Scanner error: ' +
-      (error.message || 'Unable to start scanner.'),
+      'Unable to start the 1D barcode scanner: ' +
+      (error.message || 'Unknown error'),
       'error'
     );
   }
 }
 
 
+/*
+ * Stop scanner and camera.
+ */
 function stopScanner() {
 
   try {
@@ -380,14 +388,10 @@ function stopScanner() {
     if (controls) {
 
       controls.stop();
-
       controls = null;
     }
 
-    if (codeReader) {
-
-      codeReader = null;
-    }
+    codeReader = null;
 
     if (video.srcObject) {
 
@@ -405,6 +409,9 @@ function stopScanner() {
 }
 
 
+/*
+ * Button events.
+ */
 startButton.addEventListener(
   'click',
   startScanner
@@ -420,7 +427,6 @@ stopButton.addEventListener(
     setStatus(
       'Camera stopped.'
     );
-
   }
 );
 
@@ -432,7 +438,6 @@ sendButton.addEventListener(
     sendIMEI(
       imeiInput.value
     );
-
   }
 );
 
