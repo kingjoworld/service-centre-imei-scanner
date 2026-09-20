@@ -6,7 +6,6 @@
 
   <title>Service Centre IMEI Scanner</title>
 
-  <!-- ZXing barcode scanner -->
   <script src="https://unpkg.com/@zxing/browser@latest"></script>
 
   <style>
@@ -84,12 +83,6 @@
       min-height: 20px;
     }
 
-    .manual {
-      margin-top: 25px;
-      padding-top: 20px;
-      border-top: 1px solid #ddd;
-    }
-
     .success {
       color: #198754;
       font-weight: bold;
@@ -98,6 +91,13 @@
     .error {
       color: #dc3545;
       font-weight: bold;
+    }
+
+    .info {
+      margin-top: 15px;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
     }
   </style>
 </head>
@@ -109,7 +109,7 @@
   <h2>📷 IMEI Scanner</h2>
 
   <p style="text-align:center;">
-    Point your camera at the IMEI barcode.
+    Point the camera directly at the IMEI barcode.
   </p>
 
   <video id="video" autoplay muted playsinline></video>
@@ -144,207 +144,303 @@
 
   </div>
 
+  <div class="info">
+    Scanner supports common 1D and 2D barcode formats.
+  </div>
+
 </div>
 
 <script>
 
-  let codeReader = null;
-  let controls = null;
+let codeReader = null;
+let controls = null;
 
-  const video = document.getElementById('video');
-  const status = document.getElementById('status');
-  const startButton = document.getElementById('startButton');
-  const stopButton = document.getElementById('stopButton');
-  const sendButton = document.getElementById('sendButton');
-  const imeiInput = document.getElementById('imeiInput');
+const video = document.getElementById('video');
+const status = document.getElementById('status');
+const startButton = document.getElementById('startButton');
+const stopButton = document.getElementById('stopButton');
+const sendButton = document.getElementById('sendButton');
+const imeiInput = document.getElementById('imeiInput');
 
-  function setStatus(message, type = '') {
-    status.textContent = message;
-    status.className = 'status';
 
-    if (type) {
-      status.classList.add(type);
-    }
+function setStatus(message, type = '') {
+
+  status.textContent = message;
+
+  status.className = 'status';
+
+  if (type) {
+    status.classList.add(type);
+  }
+}
+
+
+/*
+ * Extract a 14–16 digit IMEI from whatever
+ * text the barcode decoder returns.
+ */
+function extractIMEI(text) {
+
+  if (!text) {
+    return null;
   }
 
-  function cleanIMEI(value) {
-    return String(value || '').replace(/\D/g, '');
+  const digits = String(text).replace(/\D/g, '');
+
+  /*
+   * Look for a 14–16 digit sequence.
+   */
+  const match = digits.match(/\d{14,16}/);
+
+  if (match) {
+    return match[0];
   }
 
-  function validIMEI(imei) {
-    return /^\d{14,16}$/.test(imei);
+  return null;
+}
+
+
+function sendIMEI(imei) {
+
+  imei = extractIMEI(imei);
+
+  if (!imei) {
+
+    setStatus(
+      'No valid 14–16 digit IMEI was found.',
+      'error'
+    );
+
+    return;
   }
 
-  function sendIMEI(imei) {
+  imeiInput.value = imei;
 
-    imei = cleanIMEI(imei);
+  if (window.opener && !window.opener.closed) {
 
-    if (!validIMEI(imei)) {
+    window.opener.postMessage(
+      {
+        type: 'IMEI_SCANNED',
+        imei: imei
+      },
+      '*'
+    );
+
+    setStatus(
+      'IMEI ' + imei + ' sent successfully.',
+      'success'
+    );
+
+    stopScanner();
+
+  } else {
+
+    setStatus(
+      'Scanner was not opened from the Service Centre system.',
+      'error'
+    );
+  }
+}
+
+
+async function startScanner() {
+
+  try {
+
+    stopScanner();
+
+    if (!window.ZXingBrowser) {
+
       setStatus(
-        'Please enter a valid 14–16 digit IMEI.',
+        'ZXing scanner library did not load. Check your internet connection.',
         'error'
       );
+
       return;
     }
 
-    if (window.opener && !window.opener.closed) {
+    setStatus(
+      'Preparing camera and barcode scanner...'
+    );
 
-      window.opener.postMessage(
-        {
-          type: 'IMEI_SCANNED',
-          imei: imei
-        },
-        '*'
-      );
+    /*
+     * Create ZXing reader.
+     */
+    codeReader =
+      new ZXingBrowser.BrowserMultiFormatReader();
+
+    /*
+     * Get available cameras.
+     */
+    const devices =
+      await ZXingBrowser.BrowserCodeReader
+        .listVideoInputDevices();
+
+    if (!devices || devices.length === 0) {
 
       setStatus(
-        'IMEI sent successfully to the Service Centre system.',
-        'success'
-      );
-
-      stopScanner();
-
-    } else {
-
-      setStatus(
-        'The Service Centre system window is not available. Please open the scanner from the system.',
+        'No camera was found on this device.',
         'error'
       );
+
+      return;
     }
-  }
 
-  async function startScanner() {
+    /*
+     * Prefer a back/environment camera.
+     * If unavailable, use the first camera.
+     */
+    let selectedDeviceId =
+      devices[0].deviceId;
 
-    try {
+    for (const device of devices) {
 
-      if (!window.ZXingBrowser) {
+      const label =
+        (device.label || '').toLowerCase();
 
-        setStatus(
-          'Scanner library could not be loaded. Please check your internet connection and reload the page.',
-          'error'
-        );
+      if (
+        label.includes('back') ||
+        label.includes('rear') ||
+        label.includes('environment')
+      ) {
 
-        return;
+        selectedDeviceId =
+          device.deviceId;
+
+        break;
       }
+    }
 
-      stopScanner();
+    setStatus(
+      'Camera found. Starting barcode detection...'
+    );
 
-      setStatus('Starting camera...');
+    /*
+     * Start continuous decoding.
+     */
+    controls =
+      await codeReader.decodeFromVideoDevice(
+        selectedDeviceId,
+        video,
+        (result, error) => {
 
-      codeReader =
-        new ZXingBrowser.BrowserMultiFormatReader();
+          if (result) {
 
-      controls =
-        await codeReader.decodeFromVideoDevice(
-          undefined,
-          video,
-          (result, error) => {
+            const rawText =
+              result.getText();
 
-            if (result) {
+            console.log(
+              'Barcode detected:',
+              rawText
+            );
 
-              const text = result.getText();
+            const imei =
+              extractIMEI(rawText);
 
-              const imei = cleanIMEI(text);
+            if (imei) {
 
-              if (validIMEI(imei)) {
+              sendIMEI(imei);
 
-                imeiInput.value = imei;
+            } else {
 
-                setStatus(
-                  'IMEI detected: ' + imei,
-                  'success'
-                );
-
-                sendIMEI(imei);
-
-              } else {
-
-                setStatus(
-                  'Barcode detected, but it does not contain a valid 14–16 digit IMEI.',
-                  'error'
-                );
-              }
+              setStatus(
+                'Barcode detected, but it does not contain a 14–16 digit IMEI. Keep scanning...',
+                'error'
+              );
             }
-
           }
-        );
 
-      setStatus(
-        'Camera is active. Point it at the IMEI barcode.'
+        }
       );
 
-    } catch (error) {
+    setStatus(
+      'Camera is active. Hold the IMEI barcode steady inside the camera view.'
+    );
 
-      console.error(error);
+  } catch (error) {
 
-      setStatus(
-        'Unable to start the camera. Please allow camera permission and try again.',
-        'error'
-      );
-    }
+    console.error(
+      'Scanner error:',
+      error
+    );
+
+    setStatus(
+      'Scanner error: ' +
+      (error.message || 'Unable to start scanner.'),
+      'error'
+    );
   }
+}
 
-  function stopScanner() {
 
-    try {
+function stopScanner() {
 
-      if (controls) {
-        controls.stop();
-        controls = null;
-      }
+  try {
 
-      if (codeReader) {
-        codeReader = null;
-      }
+    if (controls) {
 
-      if (video.srcObject) {
+      controls.stop();
 
-        video.srcObject
-          .getTracks()
-          .forEach(track => track.stop());
-
-        video.srcObject = null;
-      }
-
-    } catch (error) {
-
-      console.error(error);
+      controls = null;
     }
+
+    if (codeReader) {
+
+      codeReader = null;
+    }
+
+    if (video.srcObject) {
+
+      video.srcObject
+        .getTracks()
+        .forEach(track => track.stop());
+
+      video.srcObject = null;
+    }
+
+  } catch (error) {
+
+    console.error(error);
   }
+}
 
-  startButton.addEventListener(
-    'click',
-    startScanner
-  );
 
-  stopButton.addEventListener(
-    'click',
-    () => {
+startButton.addEventListener(
+  'click',
+  startScanner
+);
 
-      stopScanner();
 
-      setStatus(
-        'Camera stopped.'
-      );
+stopButton.addEventListener(
+  'click',
+  () => {
 
-    }
-  );
+    stopScanner();
 
-  sendButton.addEventListener(
-    'click',
-    () => {
+    setStatus(
+      'Camera stopped.'
+    );
 
-      sendIMEI(
-        imeiInput.value
-      );
+  }
+);
 
-    }
-  );
 
-  window.addEventListener(
-    'beforeunload',
-    stopScanner
-  );
+sendButton.addEventListener(
+  'click',
+  () => {
+
+    sendIMEI(
+      imeiInput.value
+    );
+
+  }
+);
+
+
+window.addEventListener(
+  'beforeunload',
+  stopScanner
+);
 
 </script>
 
